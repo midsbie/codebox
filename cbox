@@ -71,6 +71,16 @@ cmd_run() {
         extra_args+=(-v "$emacs_socket_dir:$emacs_socket_dir")
     fi
 
+    # Conditionally mount SSH agent socket if available
+    if [[ -S "${SSH_AUTH_SOCK:-}" ]]; then
+        extra_args+=(-v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK" -e SSH_AUTH_SOCK)
+    fi
+
+    # Conditionally mount SSH known_hosts if it exists
+    if [[ -f "$HOME/.ssh/known_hosts" ]]; then
+        extra_args+=(-v "$HOME/.ssh/known_hosts:$HOME/.ssh/known_hosts:ro")
+    fi
+
     env_file="$(mktemp /tmp/codebox.XXXXXX.env)"
     trap 'rm -f "$env_file"' EXIT
 
