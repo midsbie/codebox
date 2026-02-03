@@ -25,6 +25,7 @@ services:
     volumes:
       - ${HOST_HOME}/.claude:${HOST_HOME}/.claude
       - ${HOST_HOME}/.claude.json:${HOST_HOME}/.claude.json
+      - ${HOST_HOME}/.gitconfig:${HOST_HOME}/.gitconfig:ro
       - ${HOST_HOME}/.local/bin:${HOST_HOME}/.local/bin:ro
       - ${HOST_HOME}/.local/share/claude:${HOST_HOME}/.local/share/claude:ro
       - ${HOST_HOME}/.ssh/known_hosts:${HOST_HOME}/.ssh/known_hosts:ro
