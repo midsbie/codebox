@@ -26,6 +26,7 @@ RUN chmod +x /entrypoint.sh
 
 ENV EXPECTED_UID=$HOST_UID
 ENV EXPECTED_GID=$HOST_GID
+ENV PATH="$HOST_HOME/.local/bin:$PATH"
 
 USER $HOST_USER
 
