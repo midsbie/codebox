@@ -15,6 +15,9 @@ services:
       - HOST_HOME
       - TERM
       - ANTHROPIC_API_KEY
+      # Prevent git from prompting for credentials, which would hijack stdin
+      - GIT_TERMINAL_PROMPT=0
+      - GIT_SSH_COMMAND=ssh -o BatchMode=yes
     volumes:
       - ${HOST_HOME}/.claude:${HOST_HOME}/.claude
       - ${HOST_HOME}/.claude.json:${HOST_HOME}/.claude.json
