@@ -1,0 +1,22 @@
+services:
+  cbox:
+    build:
+      context: .
+      args:
+        HOST_UID: ${HOST_UID}
+        HOST_GID: ${HOST_GID}
+        HOST_USER: ${HOST_USER}
+        HOST_HOME: ${HOST_HOME}
+    image: codebox:${HOST_USER}
+    stdin_open: true
+    tty: true
+    environment:
+      - HOST_HOME
+      - TERM
+      - ANTHROPIC_API_KEY
+    volumes:
+      - ${HOST_HOME}/.claude:${HOST_HOME}/.claude
+      - ${HOST_HOME}/.local/bin:${HOST_HOME}/.local/bin:ro
+      - ${HOST_HOME}/.local/share/claude:${HOST_HOME}/.local/share/claude:ro
+      - ${REPO_ROOT}:${REPO_ROOT}
+    working_dir: ${WORK_DIR}

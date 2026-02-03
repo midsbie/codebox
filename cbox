@@ -1,0 +1,92 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_FILE="$SCRIPT_DIR/compose.yaml"
+
+usage() {
+    cat <<EOF
+Usage: cbox <command> [options]
+
+Run Claude Code in a sandboxed Docker container.
+
+Commands:
+    run         Run claude in the container (default if no command given)
+    build       Build the container image for the current user
+    help        Show this help message
+
+Examples:
+    cbox                    Run claude in current git repository
+    cbox run                Same as above
+    cbox build              Build the image for your user
+    cbox build --no-cache   Rebuild from scratch
+
+Environment:
+    ANTHROPIC_API_KEY       API key for Claude (required for run)
+EOF
+}
+
+# Create env file with current user info
+create_env_file() {
+    local env_file="$1"
+    local repo_root="${2:-/tmp}"
+    local work_dir="${3:-/tmp}"
+
+    cat > "$env_file" <<EOF
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+HOST_USER=$USER
+HOST_HOME=$HOME
+TERM=$TERM
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+REPO_ROOT=$repo_root
+WORK_DIR=$work_dir
+EOF
+}
+
+cmd_build() {
+    local env_file
+    env_file="$(mktemp /tmp/codebox.XXXXXX.env)"
+    trap 'rm -f "$env_file"' EXIT
+
+    create_env_file "$env_file"
+    exec docker compose -f "$COMPOSE_FILE" --env-file "$env_file" build "$@"
+}
+
+cmd_run() {
+    local repo_root work_dir env_file
+
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+        echo "Error: must be run from within a git repository" >&2
+        exit 1
+    }
+    work_dir="$(pwd)"
+
+    env_file="$(mktemp /tmp/codebox.XXXXXX.env)"
+    trap 'rm -f "$env_file"' EXIT
+
+    create_env_file "$env_file" "$repo_root" "$work_dir"
+    exec docker compose -f "$COMPOSE_FILE" --env-file "$env_file" run --rm cbox "$@"
+}
+
+# Parse command
+case "${1:-run}" in
+    run)
+        shift 2>/dev/null || true
+        cmd_run "$@"
+        ;;
+    build)
+        shift
+        cmd_build "$@"
+        ;;
+    help|--help|-h)
+        usage
+        exit 0
+        ;;
+    *)
+        echo "Error: unknown command '$1'" >&2
+        echo >&2
+        usage >&2
+        exit 1
+        ;;
+esac

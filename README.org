@@ -1,0 +1,37 @@
+* codebox
+
+Run Claude Code in a sandboxed Docker container with host UID/GID mapping.
+
+** Requirements
+
+- Docker with Compose
+- Claude Code installed on host (~/.local/bin/claude)
+- ANTHROPIC_API_KEY set
+
+** Setup
+
+Build image for your user (once):
+
+#+begin_src sh
+./cbox build
+#+end_src
+
+** Usage
+
+Run from any git repository:
+
+#+begin_src sh
+./cbox
+#+end_src
+
+** Commands
+
+| Command | Description                    |
+|---------+--------------------------------|
+| run     | Run claude (default)           |
+| build   | Build image for current user   |
+| help    | Show usage                     |
+
+** How it works
+
+The image is built with your UID/GID baked in. Mounted volumes (repo, config) have correct ownership. Each user needs their own image.
