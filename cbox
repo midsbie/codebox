@@ -71,6 +71,12 @@ cmd_run() {
         extra_args+=(-v "$emacs_socket_dir:$emacs_socket_dir")
     fi
 
+    # Create shared temp directory for editor integration (allows host Emacs to access Claude's temp files)
+    local editor_tmp="/tmp/claude-editor-tmp"
+    mkdir -p "$editor_tmp"
+    chmod 700 "$editor_tmp"
+    extra_args+=(-v "$editor_tmp:$editor_tmp" -e TMPDIR="$editor_tmp")
+
     # Conditionally mount SSH agent socket if available
     if [[ -S "${SSH_AUTH_SOCK:-}" ]]; then
         extra_args+=(-v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK" -e SSH_AUTH_SOCK)

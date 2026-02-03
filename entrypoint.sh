@@ -7,4 +7,12 @@ if [ "$(id -u)" != "$EXPECTED_UID" ] || [ "$(id -g)" != "$EXPECTED_GID" ]; then
     exit 1
 fi
 
+# Warn if EDITOR points to a non-existent command
+if [[ -n "$EDITOR" ]]; then
+    editor_cmd="${EDITOR%% *}"
+    if ! command -v "$editor_cmd" >/dev/null 2>&1; then
+        echo "Warning: EDITOR='$EDITOR' not found in container" >&2
+    fi
+fi
+
 exec "$HOST_HOME/.local/bin/claude" "$@"
