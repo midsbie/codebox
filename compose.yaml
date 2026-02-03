@@ -10,6 +10,7 @@ services:
     image: codebox:${HOST_USER}
     stdin_open: true
     tty: true
+    init: true  # Required for proper Ctrl-C signal handling
     environment:
       - HOST_HOME
       - TERM
