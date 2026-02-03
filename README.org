@@ -30,6 +30,7 @@ Run from any git repository:
 |---------+--------------------------------|
 | run     | Run claude (default)           |
 | build   | Build image for current user   |
+| kill    | Kill running codebox containers|
 | help    | Show usage                     |
 
 ** How it works

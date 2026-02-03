@@ -13,6 +13,7 @@ Run Claude Code in a sandboxed Docker container.
 Commands:
     run         Run claude in the container (default if no command given)
     build       Build the container image for the current user
+    kill        List and optionally kill running codebox containers
     help        Show this help message
 
 Examples:
@@ -20,6 +21,8 @@ Examples:
     cbox run                Same as above
     cbox build              Build the image for your user
     cbox build --no-cache   Rebuild from scratch
+    cbox kill               Interactively kill running containers
+    cbox kill --all         Kill all running containers without prompting
 
 Environment:
     ANTHROPIC_API_KEY       API key for Claude (required for run)
@@ -69,6 +72,49 @@ cmd_run() {
     exec docker compose -f "$COMPOSE_FILE" --env-file "$env_file" run --rm cbox "$@"
 }
 
+cmd_kill() {
+    local image_name="codebox:$USER"
+    local containers kill_all=false
+
+    if [[ "${1:-}" == "--all" ]]; then
+        kill_all=true
+    fi
+
+    containers=$(docker ps --filter "ancestor=$image_name" --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.RunningFor}}')
+
+    if [[ -z "$containers" ]]; then
+        echo "No running codebox containers found."
+        exit 0
+    fi
+
+    echo "Running codebox containers:"
+    echo
+    printf "%-12s %-30s %-20s %s\n" "CONTAINER" "NAME" "STATUS" "RUNNING FOR"
+    echo "--------------------------------------------------------------------------------"
+    echo "$containers" | while IFS=$'\t' read -r id name status running_for; do
+        printf "%-12s %-30s %-20s %s\n" "$id" "$name" "$status" "$running_for"
+    done
+    echo
+
+    if $kill_all; then
+        echo "$containers" | while IFS=$'\t' read -r id name status running_for; do
+            echo "Killing $id ($name)..."
+            docker kill "$id" > /dev/null
+        done
+        echo "All containers killed."
+    else
+        echo "$containers" | while IFS=$'\t' read -r id name status running_for; do
+            read -r -p "Kill $id ($name)? [y/N] " response < /dev/tty
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                docker kill "$id" > /dev/null
+                echo "  Killed."
+            else
+                echo "  Skipped."
+            fi
+        done
+    fi
+}
+
 # Parse command
 case "${1:-run}" in
     run)
@@ -78,6 +124,10 @@ case "${1:-run}" in
     build)
         shift
         cmd_build "$@"
+        ;;
+    kill)
+        shift
+        cmd_kill "$@"
         ;;
     help|--help|-h)
         usage
