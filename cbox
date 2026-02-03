@@ -57,7 +57,7 @@ cmd_build() {
 }
 
 cmd_run() {
-    local repo_root work_dir env_file
+    local repo_root work_dir env_file extra_args=()
 
     repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
         echo "Error: must be run from within a git repository" >&2
@@ -65,11 +65,17 @@ cmd_run() {
     }
     work_dir="$(pwd)"
 
+    # Conditionally mount Emacs server socket if it exists
+    local emacs_socket_dir="/run/user/$(id -u)/emacs"
+    if [[ -S "$emacs_socket_dir/server" ]]; then
+        extra_args+=(-v "$emacs_socket_dir:$emacs_socket_dir")
+    fi
+
     env_file="$(mktemp /tmp/codebox.XXXXXX.env)"
     trap 'rm -f "$env_file"' EXIT
 
     create_env_file "$env_file" "$repo_root" "$work_dir"
-    exec docker compose -f "$COMPOSE_FILE" --env-file "$env_file" run --rm cbox "$@"
+    exec docker compose -f "$COMPOSE_FILE" --env-file "$env_file" run --rm "${extra_args[@]}" cbox "$@"
 }
 
 cmd_kill() {

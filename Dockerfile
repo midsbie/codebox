@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     git \
     ripgrep \
     ca-certificates \
+    emacs-nox \
     && rm -rf /var/lib/apt/lists/*
 
 # Remove any conflicting user/group, then create host user

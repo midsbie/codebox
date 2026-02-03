@@ -15,6 +15,9 @@ services:
       - HOST_HOME
       - TERM
       - ANTHROPIC_API_KEY
+      - EDITOR
+      - ALTERNATE_EDITOR
+      - XDG_RUNTIME_DIR=/run/user/${HOST_UID}
       # Prevent git/ssh from prompting for credentials, which would hijack stdin:
       #   GIT_TERMINAL_PROMPT - disables git's built-in terminal prompts
       #   GIT_ASKPASS - disables external credential helper programs
