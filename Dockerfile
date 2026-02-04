@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     ripgrep \
     ca-certificates \
     emacs-nox \
+    curl \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Remove any conflicting user/group, then create host user
@@ -27,8 +29,13 @@ RUN chmod +x /entrypoint.sh
 
 ENV EXPECTED_UID=$HOST_UID
 ENV EXPECTED_GID=$HOST_GID
-ENV PATH="$HOST_HOME/.local/bin:$PATH"
+ENV VOLTA_HOME="$HOST_HOME/.volta"
+ENV PATH="$VOLTA_HOME/bin:$HOST_HOME/.local/bin:$PATH"
 
 USER $HOST_USER
+
+# Install Volta and Node.js LTS
+RUN curl https://get.volta.sh | bash \
+    && volta install node
 
 ENTRYPOINT ["/entrypoint.sh"]
