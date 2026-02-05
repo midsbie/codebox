@@ -6,7 +6,7 @@ Run Claude Code in a sandboxed Docker container with host UID/GID mapping.
 
 - Docker with Compose
 - Claude Code installed on host (~/.local/bin/claude)
-- ANTHROPIC_API_KEY set
+- =ANTHROPIC_API_KEY= set
 
 ** Setup
 
@@ -14,6 +14,12 @@ Build image for your user (once):
 
 #+begin_src sh
 ./cbox build
+#+end_src
+
+Rebuild from scratch if needed:
+
+#+begin_src sh
+./cbox build --no-cache
 #+end_src
 
 ** Usage
@@ -24,15 +30,61 @@ Run from any git repository:
 ./cbox
 #+end_src
 
+Arguments are forwarded to =claude=:
+
+#+begin_src sh
+./cbox run --model opus
+#+end_src
+
+=cbox= can be invoked via symlink; it resolves its own location to find =compose.yaml=.
+
 ** Commands
 
-| Command | Description                    |
-|---------+--------------------------------|
-| run     | Run claude (default)           |
-| build   | Build image for current user   |
-| kill    | Kill running codebox containers|
-| help    | Show usage                     |
+| Command          | Description                                      |
+|------------------+--------------------------------------------------|
+| =run=            | Run claude in the container (default)            |
+| =build=          | Build the container image for the current user   |
+| =kill=           | Interactively kill running codebox containers    |
+| =kill --all=     | Kill all running containers without prompting    |
+| =help=           | Show usage                                       |
 
 ** How it works
 
-The image is built with your UID/GID baked in. Mounted volumes (repo, config) have correct ownership. Each user needs their own image.
+The image is built with your UID/GID baked in. Mounted volumes (repo, config) have correct ownership. Each user needs their own image (tagged =codebox:$USER=).
+
+*** What gets mounted
+
+| Volume                          | Mode | Purpose                               |
+|---------------------------------+------+---------------------------------------|
+| =~/.claude=                     | rw   | Claude settings and session data      |
+| =~/.claude.json=                | rw   | Claude configuration                  |
+| =~/.gitconfig=                  | ro   | Git user identity                     |
+| =~/.local/bin=                  | ro   | Claude CLI binary                     |
+| =~/.local/share/claude=         | ro   | Claude shared data                    |
+| Git repo root                   | rw   | The repository you're working in      |
+
+*** Conditional mounts
+
+These are added only when the corresponding host resources exist:
+
+| Resource                             | Condition                          | Purpose                             |
+|--------------------------------------+------------------------------------+-------------------------------------|
+| Emacs server socket                  | =/run/user/$UID/emacs/server=      | =emacsclient= from inside container |
+| SSH agent socket                     | =$SSH_AUTH_SOCK= is set            | Git SSH operations                  |
+| =~/.ssh/known_hosts=                 | File exists                        | SSH host verification               |
+*** Limitations
+
+Git commit signing (GPG/SSH) does not work inside the container. The recommended workaround is to run a separate Claude instance on the host for reviewing and committing changes.
+
+*** Editor integration
+
+A shared temp directory (=/tmp/claude-editor-tmp=) is created on the host and mounted into the container as =$TMPDIR=. This allows a host editor (e.g. Emacs via =emacsclient=) to open temporary files created by Claude inside the container.
+
+The =EDITOR= and =ALTERNATE_EDITOR= environment variables are passed through. The entrypoint warns if =EDITOR= points to a command not available inside the container.
+
+*** Container environment
+
+- Git credential/SSH prompts are disabled (=GIT_TERMINAL_PROMPT=0=, =GIT_ASKPASS==, =ssh -o BatchMode=yes=) to prevent hijacking stdin
+- =init: true= is set for proper Ctrl-C signal handling
+- Volta and Node.js LTS are pre-installed in the image
+- =emacs-nox=, =ripgrep=, =make=, =curl=, and =gpg= are available
