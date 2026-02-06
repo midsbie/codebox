@@ -6,7 +6,6 @@ Run Claude Code in a sandboxed Docker container with host UID/GID mapping.
 
 - Docker with Compose
 - Claude Code installed on host (~/.local/bin/claude)
-- =ANTHROPIC_API_KEY= set
 
 ** Setup
 
