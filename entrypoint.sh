@@ -15,4 +15,11 @@ if [[ -n "$EDITOR" ]]; then
     fi
 fi
 
-exec "$HOST_HOME/.local/bin/claude" "$@"
+claude_bin="$HOST_HOME/.local/bin/claude"
+if ! [ -x "$claude_bin" ]; then
+    echo "Error: claude not found at $claude_bin" >&2
+    echo "Install it: https://code.claude.com/docs" >&2
+    exit 1
+fi
+
+exec "$claude_bin" "$@"
