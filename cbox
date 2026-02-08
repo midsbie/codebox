@@ -15,6 +15,7 @@ Run Claude Code in a sandboxed Docker container.
 
 Commands:
     run         Run claude in the container (default if no command given)
+    exec        Run a command in the container (default: bash)
     init        Create a per-repo .claude/Dockerfile template
     build       Build the container image for the current user
     kill        List and optionally kill running codebox containers
@@ -30,6 +31,8 @@ Images:
 Examples:
     cbox                    Run claude in current git repository
     cbox run                Same as above
+    cbox exec               Start a bash shell in the container
+    cbox exec node -v       Run a command in the container
     cbox init               Create .claude/Dockerfile in current repo
     cbox build              Build the image(s) for your user
     cbox build --no-cache   Rebuild from scratch
@@ -54,6 +57,13 @@ sanitize_repo_name() {
         name="$(echo "$repo_root" | md5sum | cut -c1-12)"
     fi
     echo "$name"
+}
+
+require_repo_root() {
+    git rev-parse --show-toplevel 2>/dev/null || {
+        echo "Error: must be run from within a git repository" >&2
+        exit 1
+    }
 }
 
 base_image_tag() {
@@ -177,10 +187,7 @@ resolve_image() {
 # +-----------------------------------------------------------
 cmd_init() {
     local repo_root
-    repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-        echo "Error: must be run from within a git repository" >&2
-        exit 1
-    }
+    repo_root="$(require_repo_root)"
 
     local dockerfile="$repo_root/$REPO_DOCKERFILE"
     if [[ -f "$dockerfile" ]]; then
@@ -208,18 +215,9 @@ cmd_build() {
     fi
 }
 
-cmd_run() {
-    local repo_root work_dir run_args=()
-
-    repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-        echo "Error: must be run from within a git repository" >&2
-        exit 1
-    }
-    work_dir="$(pwd)"
-
-    local cbox_image
-    cbox_image="$(resolve_image "$repo_root")"
-
+# Populates the caller's `run_args` array with common Docker run flags.
+# Expects the caller to have declared: run_args=(), repo_root, work_dir.
+build_run_args() {
     run_args+=(--rm --interactive --tty --init)
     run_args+=(-w "$work_dir")
 
@@ -264,8 +262,37 @@ cmd_run() {
     if [[ -f "$HOME/.ssh/known_hosts" ]]; then
         run_args+=(-v "$HOME/.ssh/known_hosts:$HOME/.ssh/known_hosts:ro")
     fi
+}
 
+cmd_run() {
+    local repo_root work_dir run_args=()
+
+    repo_root="$(require_repo_root)"
+    work_dir="$(pwd)"
+
+    local cbox_image
+    cbox_image="$(resolve_image "$repo_root")"
+
+    build_run_args
     exec docker run "${run_args[@]}" "$cbox_image" "$@"
+}
+
+cmd_exec() {
+    local repo_root work_dir run_args=()
+
+    repo_root="$(require_repo_root)"
+    work_dir="$(pwd)"
+
+    local cbox_image
+    cbox_image="$(resolve_image "$repo_root")"
+
+    build_run_args
+
+    if [[ $# -eq 0 ]]; then
+        set -- /bin/bash
+    fi
+
+    exec docker run --entrypoint "" "${run_args[@]}" "$cbox_image" "$@"
 }
 
 cmd_kill() {
@@ -316,6 +343,10 @@ case "${1:-run}" in
     run)
         shift 2>/dev/null || true
         cmd_run "$@"
+        ;;
+    exec)
+        shift
+        cmd_exec "$@"
         ;;
     kill)
         shift
