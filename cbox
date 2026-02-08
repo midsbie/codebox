@@ -1,8 +1,11 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-COMPOSE_FILE="$SCRIPT_DIR/compose.yaml"
+readonly SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+readonly NAMESPACE="codebox"
+readonly BASE_IMAGE_NAME="${NAMESPACE}-base"
+readonly REPO_DOCKERFILE=".claude/Dockerfile"
+readonly EDITOR_TMP="/tmp/${NAMESPACE}-editor-tmp"
 
 usage() {
     cat <<EOF
@@ -12,14 +15,23 @@ Run Claude Code in a sandboxed Docker container.
 
 Commands:
     run         Run claude in the container (default if no command given)
+    init        Create a per-repo .claude/Dockerfile template
     build       Build the container image for the current user
     kill        List and optionally kill running codebox containers
     help        Show this help message
 
+Images:
+    ${BASE_IMAGE_NAME}:\$USER       Base image with common tooling
+    ${NAMESPACE}:\$USER-<reponame>  Per-repo image (when $REPO_DOCKERFILE exists)
+
+    The base image is always required. If a repository contains .claude/Dockerfile, a repo-specific
+    image is built on top of it.  Run "cbox init" inside a git repo to create the template.
+
 Examples:
     cbox                    Run claude in current git repository
     cbox run                Same as above
-    cbox build              Build the image for your user
+    cbox init               Create .claude/Dockerfile in current repo
+    cbox build              Build the image(s) for your user
     cbox build --no-cache   Rebuild from scratch
     cbox kill               Interactively kill running containers
     cbox kill --all         Kill all running containers without prompting
@@ -29,35 +41,175 @@ Environment:
 EOF
 }
 
-# Create env file with current user info
-create_env_file() {
-    local env_file="$1"
-    local repo_root="${2:-/tmp}"
-    local work_dir="${3:-/tmp}"
+# | Helper functions
+# +-----------------------------------------------------------
+sanitize_repo_name() {
+    local repo_root="$1"
+    local name
+    name="$(basename "$repo_root")"
+    name="$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+    name="$(echo "$name" | sed 's/[^a-z0-9._-]/-/g')"
+    name="$(echo "$name" | sed 's/^-*//;s/-*$//')"
+    if [[ -z "$name" ]]; then
+        name="$(echo "$repo_root" | md5sum | cut -c1-12)"
+    fi
+    echo "$name"
+}
 
-    cat > "$env_file" <<EOF
-HOST_UID=$(id -u)
-HOST_GID=$(id -g)
-HOST_USER=$USER
-HOST_HOME=$HOME
-TERM=$TERM
-ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-REPO_ROOT=$repo_root
-WORK_DIR=$work_dir
-EOF
+base_image_tag() {
+    echo "${BASE_IMAGE_NAME}:$USER"
+}
+
+repo_image_tag() {
+    local repo_root="$1"
+    local sanitized
+    sanitized="$(sanitize_repo_name "$repo_root")"
+    echo "${NAMESPACE}:${USER}-${sanitized}"
+}
+
+find_repo_dockerfile() {
+    local repo_root="$1"
+    local dockerfile="$repo_root/$REPO_DOCKERFILE"
+    if [[ -f "$dockerfile" ]]; then
+        echo "$dockerfile"
+        return 0
+    fi
+    return 1
+}
+
+image_exists() {
+    local tag="$1"
+    docker image inspect "$tag" > /dev/null 2>&1
+}
+
+image_created_epoch() {
+    local tag="$1"
+    docker inspect --format '{{.Created}}' "$tag" 2>/dev/null \
+        | xargs -I{} date -d {} +%s 2>/dev/null
+}
+
+needs_build() {
+    local tag="$1"
+    local dockerfile="$2"
+    if ! image_exists "$tag"; then
+        return 0
+    fi
+    local image_epoch dockerfile_epoch
+    image_epoch="$(image_created_epoch "$tag")"
+    dockerfile_epoch="$(stat -c %Y "$dockerfile")"
+    [[ "$dockerfile_epoch" -gt "$image_epoch" ]]
+}
+
+build_base_image() {
+    echo "Building base image $(base_image_tag)..." >&2
+    docker build \
+        -f "$SCRIPT_DIR/Dockerfile.base" \
+        --build-arg HOST_UID="$(id -u)" \
+        --build-arg HOST_GID="$(id -g)" \
+        --build-arg HOST_USER="$USER" \
+        --build-arg HOST_HOME="$HOME" \
+        -t "$(base_image_tag)" \
+        "$@" \
+        "$SCRIPT_DIR"
+}
+
+build_repo_image() {
+    local repo_root="$1"
+    shift
+    local base_tag repo_tag dockerfile
+
+    base_tag="$(base_image_tag)"
+    repo_tag="$(repo_image_tag "$repo_root")"
+    dockerfile="$repo_root/$REPO_DOCKERFILE"
+
+    if ! image_exists "$base_tag"; then
+        build_base_image
+    fi
+
+    echo "Building repo image $repo_tag..." >&2
+    docker build \
+        -f "$dockerfile" \
+        --build-arg CODEBOX_BASE="$base_tag" \
+        -t "$repo_tag" \
+        "$@" \
+        "$repo_root/.claude/"
+}
+
+resolve_image() {
+    local repo_root="$1"
+    local base_tag repo_tag dockerfile
+
+    base_tag="$(base_image_tag)"
+
+    if needs_build "$base_tag" "$SCRIPT_DIR/Dockerfile.base"; then
+        echo "Base image is stale or missing, building..." >&2
+        build_base_image >&2
+    fi
+
+    if ! dockerfile="$(find_repo_dockerfile "$repo_root")"; then
+        echo "$base_tag"
+        return
+    fi
+
+    repo_tag="$(repo_image_tag "$repo_root")"
+
+    if needs_build "$repo_tag" "$dockerfile"; then
+        echo "Repo image is stale or missing, building..." >&2
+        build_repo_image "$repo_root" >&2
+        echo "$repo_tag"
+        return
+    fi
+
+    # The logical consequence at this point is the repo image was built against an older base and we
+    # rebuild to pick up base changes.
+    local base_epoch repo_epoch
+    base_epoch="$(image_created_epoch "$base_tag")"
+    repo_epoch="$(image_created_epoch "$repo_tag")"
+    if [[ "$base_epoch" -gt "$repo_epoch" ]]; then
+        echo "Base image is newer than repo image, rebuilding..." >&2
+        build_repo_image "$repo_root" >&2
+    fi
+
+    echo "$repo_tag"
+}
+
+# | Core commands
+# +-----------------------------------------------------------
+cmd_init() {
+    local repo_root
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+        echo "Error: must be run from within a git repository" >&2
+        exit 1
+    }
+
+    local dockerfile="$repo_root/$REPO_DOCKERFILE"
+    if [[ -f "$dockerfile" ]]; then
+        echo "Error: $dockerfile already exists" >&2
+        exit 1
+    fi
+
+    mkdir -p "$(dirname "$dockerfile")"
+    cp "$SCRIPT_DIR/Dockerfile.repo-template" "$dockerfile"
+
+    echo "Created $dockerfile"
+    echo "Edit it to add your project's dependencies, then run: cbox build"
 }
 
 cmd_build() {
-    local env_file
-    env_file="$(mktemp /tmp/codebox.XXXXXX.env)"
-    trap 'rm -f "$env_file"' EXIT
+    # NOTE: Extra arguments (e.g. --no-cache) are forwarded to both the base and repo image builds.
+    # This is convenient for flags like --no-cache but means repo-specific docker build flags will
+    # also hit the base build (and vice versa).
+    build_base_image "$@"
 
-    create_env_file "$env_file"
-    exec docker compose -f "$COMPOSE_FILE" --env-file "$env_file" build "$@"
+    local repo_root
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || true
+    if [[ -n "$repo_root" ]] && find_repo_dockerfile "$repo_root" > /dev/null; then
+        build_repo_image "$repo_root" "$@"
+    fi
 }
 
 cmd_run() {
-    local repo_root work_dir env_file extra_args=()
+    local repo_root work_dir run_args=()
 
     repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
         echo "Error: must be run from within a git repository" >&2
@@ -65,44 +217,66 @@ cmd_run() {
     }
     work_dir="$(pwd)"
 
+    local cbox_image
+    cbox_image="$(resolve_image "$repo_root")"
+
+    run_args+=(--rm --interactive --tty --init)
+    run_args+=(-w "$work_dir")
+
+    # Environment
+    run_args+=(-e HOST_HOME="$HOME")
+    run_args+=(-e TERM)
+    run_args+=(-e ANTHROPIC_API_KEY)
+    run_args+=(-e EDITOR)
+    run_args+=(-e ALTERNATE_EDITOR)
+    run_args+=(-e "XDG_RUNTIME_DIR=/run/user/$(id -u)")
+    # - Prevent git/ssh from prompting for credentials, which would hijack stdin
+    run_args+=(-e GIT_TERMINAL_PROMPT=0)
+    run_args+=(-e GIT_ASKPASS=)
+    run_args+=(-e "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
+
+    # Volumes
+    run_args+=(-v "$HOME/.claude:$HOME/.claude")
+    run_args+=(-v "$HOME/.claude.json:$HOME/.claude.json")
+    run_args+=(-v "$HOME/.gitconfig:$HOME/.gitconfig:ro")
+    run_args+=(-v "$HOME/.local/bin:$HOME/.local/bin:ro")
+    run_args+=(-v "$HOME/.local/share/claude:$HOME/.local/share/claude:ro")
+    run_args+=(-v "$repo_root:$repo_root")
+
     # Conditionally mount Emacs server socket if it exists
     local emacs_socket_dir="/run/user/$(id -u)/emacs"
     if [[ -S "$emacs_socket_dir/server" ]]; then
-        extra_args+=(-v "$emacs_socket_dir:$emacs_socket_dir")
+        run_args+=(-v "$emacs_socket_dir:$emacs_socket_dir")
     fi
 
-    # Create shared temp directory for editor integration (allows host Emacs to access Claude's temp files)
-    local editor_tmp="/tmp/claude-editor-tmp"
-    mkdir -p "$editor_tmp"
-    chmod 700 "$editor_tmp"
-    extra_args+=(-v "$editor_tmp:$editor_tmp" -e TMPDIR="$editor_tmp")
+    # Create shared temp directory for editor integration. This allows host editors, like Emacs via
+    # emacsclient, to access Claude's temp files.
+    mkdir -p "$EDITOR_TMP"
+    chmod 700 "$EDITOR_TMP"
+    run_args+=(-v "$EDITOR_TMP:$EDITOR_TMP" -e TMPDIR="$EDITOR_TMP")
 
     # Conditionally mount SSH agent socket if available
     if [[ -S "${SSH_AUTH_SOCK:-}" ]]; then
-        extra_args+=(-v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK" -e SSH_AUTH_SOCK)
+        run_args+=(-v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK" -e SSH_AUTH_SOCK)
     fi
 
     # Conditionally mount SSH known_hosts if it exists
     if [[ -f "$HOME/.ssh/known_hosts" ]]; then
-        extra_args+=(-v "$HOME/.ssh/known_hosts:$HOME/.ssh/known_hosts:ro")
+        run_args+=(-v "$HOME/.ssh/known_hosts:$HOME/.ssh/known_hosts:ro")
     fi
 
-    env_file="$(mktemp /tmp/codebox.XXXXXX.env)"
-    trap 'rm -f "$env_file"' EXIT
-
-    create_env_file "$env_file" "$repo_root" "$work_dir"
-    exec docker compose -f "$COMPOSE_FILE" --env-file "$env_file" run --rm "${extra_args[@]}" cbox "$@"
+    exec docker run "${run_args[@]}" "$cbox_image" "$@"
 }
 
 cmd_kill() {
-    local image_name="codebox:$USER"
     local containers kill_all=false
 
     if [[ "${1:-}" == "--all" ]]; then
         kill_all=true
     fi
 
-    containers=$(docker ps --filter "ancestor=$image_name" --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.RunningFor}}')
+    containers=$(docker ps --format '{{.ID}}\t{{.Image}}\t{{.Names}}\t{{.Status}}\t{{.RunningFor}}' \
+        | grep -E "	(${BASE_IMAGE_NAME}:${USER}|${NAMESPACE}:${USER}-)" || true)
 
     if [[ -z "$containers" ]]; then
         echo "No running codebox containers found."
@@ -111,41 +285,37 @@ cmd_kill() {
 
     echo "Running codebox containers:"
     echo
-    printf "%-12s %-30s %-20s %s\n" "CONTAINER" "NAME" "STATUS" "RUNNING FOR"
-    echo "--------------------------------------------------------------------------------"
-    echo "$containers" | while IFS=$'\t' read -r id name status running_for; do
-        printf "%-12s %-30s %-20s %s\n" "$id" "$name" "$status" "$running_for"
+    printf "%-12s %-35s %-30s %-20s %s\n" "CONTAINER" "IMAGE" "NAME" "STATUS" "RUNNING FOR"
+    echo "--------------------------------------------------------------------------------------------------------------"
+    echo "$containers" | while IFS=$'\t' read -r id image name status running_for; do
+        printf "%-12s %-35s %-30s %-20s %s\n" "$id" "$image" "$name" "$status" "$running_for"
     done
     echo
 
-    if $kill_all; then
-        echo "$containers" | while IFS=$'\t' read -r id name status running_for; do
+    echo "$containers" | while IFS=$'\t' read -r id image name status running_for; do
+        if $kill_all || { read -r -p "Kill $id ($name)? [y/N] " response < /dev/tty && [[ "$response" =~ ^[Yy]$ ]]; }; then
             echo "Killing $id ($name)..."
             docker kill "$id" > /dev/null
-        done
-        echo "All containers killed."
-    else
-        echo "$containers" | while IFS=$'\t' read -r id name status running_for; do
-            read -r -p "Kill $id ($name)? [y/N] " response < /dev/tty
-            if [[ "$response" =~ ^[Yy]$ ]]; then
-                docker kill "$id" > /dev/null
-                echo "  Killed."
-            else
-                echo "  Skipped."
-            fi
-        done
-    fi
+        else
+            echo "  Skipped."
+        fi
+    done
 }
 
-# Parse command
+# | main
+# +-----------------------------------------------------------
 case "${1:-run}" in
-    run)
-        shift 2>/dev/null || true
-        cmd_run "$@"
+    init)
+        shift
+        cmd_init "$@"
         ;;
     build)
         shift
         cmd_build "$@"
+        ;;
+    run)
+        shift 2>/dev/null || true
+        cmd_run "$@"
         ;;
     kill)
         shift

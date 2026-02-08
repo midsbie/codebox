@@ -1,0 +1,15 @@
+# Default is overridden by --build-arg; value here silences Docker's InvalidDefaultArgInFrom warning
+ARG CODEBOX_BASE=codebox-base:latest
+FROM ${CODEBOX_BASE}
+
+# Switch to root to install system packages
+USER root
+
+# Example: install project-specific dependencies
+# RUN apt-get update && apt-get install -y \
+#     golang-go \
+#     python3 \
+#     && rm -rf /var/lib/apt/lists/*
+
+# Switch back to the container user
+USER ${CBOX_USER}

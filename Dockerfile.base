@@ -21,20 +21,22 @@ RUN existing_user=$(getent passwd "$HOST_UID" | cut -d: -f1); \
     [ -n "$existing_group" ] && groupdel "$existing_group" || true; \
     groupadd -g "$HOST_GID" "$HOST_USER" && \
     useradd -u "$HOST_UID" -g "$HOST_GID" -d "$HOST_HOME" -s /bin/bash "$HOST_USER" && \
-    mkdir -p "$HOST_HOME" && \
-    chown "$HOST_UID:$HOST_GID" "$HOST_HOME"
+    mkdir -p "$HOST_HOME" "$HOST_HOME/.ssh" && \
+    chmod 700 "$HOST_HOME/.ssh" && \
+    chown -R "$HOST_UID:$HOST_GID" "$HOST_HOME"
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENV EXPECTED_UID=$HOST_UID
 ENV EXPECTED_GID=$HOST_GID
+ENV CBOX_USER=$HOST_USER
 ENV VOLTA_HOME="$HOST_HOME/.volta"
 ENV PATH="$VOLTA_HOME/bin:$HOST_HOME/.local/bin:$PATH"
 
 USER $HOST_USER
 
-# Install Volta and Node.js LTS
+# Claude Code is a Node.js application — Volta and Node are base requirements
 RUN curl https://get.volta.sh | bash \
     && volta install node
 

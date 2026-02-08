@@ -4,7 +4,8 @@ Run Claude Code in a sandboxed Docker container with host UID/GID mapping.
 
 ** Requirements
 
-- Docker with Compose
+- Linux (the =cbox= script uses GNU coreutils)
+- Docker
 - Claude Code installed on host (~/.local/bin/claude)
 
 ** Setup
@@ -21,6 +22,29 @@ Rebuild from scratch if needed:
 ./cbox build --no-cache
 #+end_src
 
+** Per-repository images
+
+Codebox uses a two-layer image system:
+
+1. *Base image* (=codebox-base:$USER=) \\
+   Contains common tooling (Node/Volta, emacs, ripgrep, etc.)
+2. *Repo image* (=codebox:$USER-<reponame>=) \\
+   Optional per-repo layer with project-specific dependencies.
+
+To set up a per-repo image, run =cbox init= inside a git repository. This creates a =.claude/Dockerfile= template that extends the base image. Edit it to add your project's dependencies (Go, Python, Rust, etc.), then run =cbox build=.
+
+When =cbox run= is invoked in a repo with =.claude/Dockerfile=, the repo image is used automatically. If no repo Dockerfile exists, the base image is used directly.
+
+Images are automatically rebuilt when:
+- The base image is missing
+- A repo =.claude/Dockerfile= has been modified since the last build
+- The base image is newer than the repo image
+
+*** Known limitations
+
+- Two repositories with the same directory basename produce the same repo image tag. Rename the directory or use distinct basenames to avoid collisions.
+- The build context for repo images is =.claude/=, not the whole repository. Files outside =.claude/= cannot be =COPY='d into the image.
+
 ** Usage
 
 Run from any git repository:
@@ -35,21 +59,22 @@ Arguments are forwarded to =claude=:
 ./cbox run --model opus
 #+end_src
 
-=cbox= can be invoked via symlink; it resolves its own location to find =compose.yaml=.
+=cbox= can be invoked via symlink; it resolves its own location to find =Dockerfile.base=.
 
 ** Commands
 
-| Command          | Description                                      |
-|------------------+--------------------------------------------------|
-| =run=            | Run claude in the container (default)            |
-| =build=          | Build the container image for the current user   |
-| =kill=           | Interactively kill running codebox containers    |
-| =kill --all=     | Kill all running containers without prompting    |
-| =help=           | Show usage                                       |
+| Command      | Description                                        |
+|--------------+----------------------------------------------------|
+| =run=        | Run claude in the container (default)              |
+| =build=      | Build the container image(s) for the current user  |
+| =init=       | Create .claude/Dockerfile template in current repo |
+| =kill=       | Interactively kill running codebox containers      |
+| =kill --all= | Kill all running containers without prompting      |
+| =help=       | Show usage                                         |
 
 ** How it works
 
-The image is built with your UID/GID baked in. Mounted volumes (repo, config) have correct ownership. Each user needs their own image (tagged =codebox:$USER=).
+The base image is built with your UID/GID baked in. Mounted volumes (repo, config) have correct ownership. Each user needs their own base image (tagged =codebox-base:$USER=). Per-repo images extend the base with additional dependencies.
 
 *** What gets mounted
 
@@ -73,11 +98,11 @@ These are added only when the corresponding host resources exist:
 | =~/.ssh/known_hosts=                 | File exists                        | SSH host verification               |
 *** Limitations
 
-Git commit signing (GPG/SSH) does not work inside the container. The recommended workaround is to run a separate Claude instance on the host for reviewing and committing changes.
+Git commit signing (GPG/SSH) does not work inside the container. The recommended workaround for now is to run a separate Claude instance on the host for reviewing and committing changes.
 
 *** Editor integration
 
-A shared temp directory (=/tmp/claude-editor-tmp=) is created on the host and mounted into the container as =$TMPDIR=. This allows a host editor (e.g. Emacs via =emacsclient=) to open temporary files created by Claude inside the container.
+A shared temp directory (=/tmp/codebox-editor-tmp=) is created on the host and mounted into the container as =$TMPDIR=. This allows a host editor (e.g. Emacs via =emacsclient=) to open temporary files created by Claude inside the container.
 
 The =EDITOR= and =ALTERNATE_EDITOR= environment variables are passed through. The entrypoint warns if =EDITOR= points to a command not available inside the container.
 
@@ -85,5 +110,5 @@ The =EDITOR= and =ALTERNATE_EDITOR= environment variables are passed through. Th
 
 - Git credential/SSH prompts are disabled (=GIT_TERMINAL_PROMPT=0=, =GIT_ASKPASS==, =ssh -o BatchMode=yes=) to prevent hijacking stdin
 - =init: true= is set for proper Ctrl-C signal handling
-- Volta and Node.js LTS are pre-installed in the image
+- Volta and Node.js LTS are pre-installed in the base image
 - =emacs-nox=, =ripgrep=, =make=, =curl=, and =gpg= are available
