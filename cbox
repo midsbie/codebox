@@ -265,6 +265,13 @@ build_run_args() {
 }
 
 cmd_run() {
+    local claude_bin="$HOME/.local/bin/claude"
+    if ! [ -x "$claude_bin" ]; then
+        echo "Error: claude not found at $claude_bin" >&2
+        echo "Install it: https://code.claude.com/docs" >&2
+        exit 1
+    fi
+
     local repo_root work_dir run_args=()
 
     repo_root="$(require_repo_root)"
