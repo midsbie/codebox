@@ -41,6 +41,7 @@ Examples:
 
 Environment:
     ANTHROPIC_API_KEY       API key for Claude (required for run)
+    CBOX_CLIPBOARD=1        Enable clipboard access (X11/Wayland)
 EOF
 }
 
@@ -261,6 +262,27 @@ build_run_args() {
     # Conditionally mount SSH known_hosts if it exists
     if [[ -f "$HOME/.ssh/known_hosts" ]]; then
         run_args+=(-v "$HOME/.ssh/known_hosts:$HOME/.ssh/known_hosts:ro")
+    fi
+
+    # Clipboard support (opt-in via CBOX_CLIPBOARD=1)
+    if [[ "${CBOX_CLIPBOARD:-}" == "1" ]]; then
+        # X11 clipboard support
+        if [[ -n "${DISPLAY:-}" && -d /tmp/.X11-unix ]]; then
+            run_args+=(-e DISPLAY)
+            run_args+=(-v /tmp/.X11-unix:/tmp/.X11-unix:ro)
+            if [[ -f "$HOME/.Xauthority" ]]; then
+                run_args+=(-v "$HOME/.Xauthority:$HOME/.Xauthority:ro")
+            fi
+        fi
+
+        # Wayland clipboard support
+        if [[ -n "${WAYLAND_DISPLAY:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]; then
+            local wayland_socket="$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+            if [[ -S "$wayland_socket" ]]; then
+                run_args+=(-e WAYLAND_DISPLAY)
+                run_args+=(-v "$wayland_socket:$wayland_socket")
+            fi
+        fi
     fi
 }
 

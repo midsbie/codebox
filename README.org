@@ -112,3 +112,24 @@ The =EDITOR= and =ALTERNATE_EDITOR= environment variables are passed through. Th
 - =init: true= is set for proper Ctrl-C signal handling
 - Volta and Node.js LTS are pre-installed in the base image
 - =emacs-nox=, =ripgrep=, =make=, =curl=, and =gpg= are available
+
+*** Clipboard support
+
+Set =CBOX_CLIPBOARD=1= to enable clipboard access (mounts X11/Wayland socket).
+
+** Security model
+
+Codebox is a guardrail, not a security boundary.
+
+*** What it protects
+
+- Accidental system damage; e.g. =rm -rf /=
+- Accessing other repositories
+- Reading =~/.ssh/id_*= private keys or other sensitive user information
+- Accessing =~/.gnupg/=, password stores, etc.
+- Modifying =/etc/= or system packages
+
+*** What it does NOT protect
+
+- Code execution by a determined attacker
+- With =CBOX_CLIPBOARD=1=: X11 keylogging, screenshots, input injection

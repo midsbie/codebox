@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y \
     emacs-nox \
     curl \
     make \
+    xclip \
+    wl-clipboard \
     && rm -rf /var/lib/apt/lists/*
 
 # Remove any conflicting user/group, then create host user
