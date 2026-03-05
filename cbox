@@ -41,6 +41,7 @@ Examples:
 
 Configuration:
     .claude/codebox-conf.sh   Host-side config, sourced before docker run
+    .claude/codebox-init.sh   Container-side init, sourced at container entry
 
     Variables (set in codebox-conf.sh):
         CBOX_MOUNTS=()          Extra volume mounts (docker -v syntax)

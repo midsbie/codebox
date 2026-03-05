@@ -42,6 +42,8 @@ Images are automatically rebuilt when:
 
 ** Per-repository configuration
 
+Two optional shell scripts in =.claude/= customize the container launch and startup:
+
 | File                      | Runs on   | When                      | Purpose                                     |
 |---------------------------+-----------+---------------------------+---------------------------------------------|
 | =.claude/codebox-conf.sh= | Host      | Before =docker run=       | Set variables that control container launch |
@@ -66,6 +68,15 @@ CBOX_MOUNTS=(
     # "$HOME/.m2:$HOME/.m2:ro"
     # "$HOME/.cargo/registry:$HOME/.cargo/registry"
 )
+#+end_src
+
+*** codebox-init.sh
+
+Sourced inside the container by the entrypoint, after UID/GID validation and before =claude= starts. Use it for runtime initialization that cannot be baked into the image.
+
+#+begin_src sh
+# .claude/codebox-init.sh
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
 #+end_src
 
 *** Known limitations
