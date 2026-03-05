@@ -105,6 +105,7 @@ Arguments are forwarded to =claude=:
 | Command      | Description                                        |
 |--------------+----------------------------------------------------|
 | =run=        | Run claude in the container (default)              |
+| =exec=       | Run a command in the container (default: bash)     |
 | =build=      | Build the container image(s) for the current user  |
 | =init=       | Create .claude/Dockerfile template in current repo |
 | =kill=       | Interactively kill running codebox containers      |
