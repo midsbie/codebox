@@ -40,6 +40,34 @@ Images are automatically rebuilt when:
 - A repo =.claude/Dockerfile= has been modified since the last build
 - The base image is newer than the repo image
 
+** Per-repository configuration
+
+| File                      | Runs on   | When                      | Purpose                                     |
+|---------------------------+-----------+---------------------------+---------------------------------------------|
+| =.claude/codebox-conf.sh= | Host      | Before =docker run=       | Set variables that control container launch |
+| =.claude/codebox-init.sh= | Container | At entry, before =claude= | Runtime init (env setup, background tasks)  |
+
+*** codebox-conf.sh
+
+Sourced by =cbox= on the host before building the =docker run= command. Use it to configure how the container is launched.
+
+Available variables:
+
+| Variable      | Type  | Description                              |
+|---------------+-------+------------------------------------------|
+| =CBOX_MOUNTS= | array | Extra volume mounts (=docker -v= syntax) |
+
+Example on sharing the host NuGet cache so =dotnet restore= inside the container resolves packages instantly without a network round-trip:
+
+#+begin_src sh
+# .claude/codebox-conf.sh
+CBOX_MOUNTS=(
+    "$HOME/.nuget:$HOME/.nuget"
+    # "$HOME/.m2:$HOME/.m2:ro"
+    # "$HOME/.cargo/registry:$HOME/.cargo/registry"
+)
+#+end_src
+
 *** Known limitations
 
 - Two repositories with the same directory basename produce the same repo image tag. Rename the directory or use distinct basenames to avoid collisions.
@@ -86,6 +114,8 @@ The base image is built with your UID/GID baked in. Mounted volumes (repo, confi
 | =~/.local/bin=                  | ro   | Claude CLI binary                     |
 | =~/.local/share/claude=         | ro   | Claude shared data                    |
 | Git repo root                   | rw   | The repository you're working in      |
+
+Additional mounts can be configured via =CBOX_MOUNTS= in =.claude/codebox-conf.sh= (see [[*Per-repository configuration][Per-repository configuration]]).
 
 *** Conditional mounts
 

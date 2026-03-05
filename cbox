@@ -39,6 +39,12 @@ Examples:
     cbox kill               Interactively kill running containers
     cbox kill --all         Kill all running containers without prompting
 
+Configuration:
+    .claude/codebox-conf.sh   Host-side config, sourced before docker run
+
+    Variables (set in codebox-conf.sh):
+        CBOX_MOUNTS=()          Extra volume mounts (docker -v syntax)
+
 Environment:
     ANTHROPIC_API_KEY       API key for Claude (required for run)
     CBOX_CLIPBOARD=1        Enable clipboard access (X11/Wayland)
@@ -86,6 +92,15 @@ find_repo_dockerfile() {
         return 0
     fi
     return 1
+}
+
+source_repo_conf() {
+    local repo_root="$1"
+    local conf="$repo_root/.claude/codebox-conf.sh"
+    CBOX_MOUNTS=()
+    if [[ -f "$conf" ]]; then
+        source "$conf"
+    fi
 }
 
 image_exists() {
@@ -284,6 +299,11 @@ build_run_args() {
             fi
         fi
     fi
+
+    # Extra mounts from codebox-conf.sh
+    for mount in "${CBOX_MOUNTS[@]}"; do
+        run_args+=(-v "$mount")
+    done
 }
 
 cmd_run() {
@@ -299,6 +319,8 @@ cmd_run() {
     repo_root="$(require_repo_root)"
     work_dir="$(pwd)"
 
+    source_repo_conf "$repo_root"
+
     local cbox_image
     cbox_image="$(resolve_image "$repo_root")"
 
@@ -311,6 +333,8 @@ cmd_exec() {
 
     repo_root="$(require_repo_root)"
     work_dir="$(pwd)"
+
+    source_repo_conf "$repo_root"
 
     local cbox_image
     cbox_image="$(resolve_image "$repo_root")"
