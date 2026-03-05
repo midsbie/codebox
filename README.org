@@ -55,11 +55,9 @@ Sourced by =cbox= on the host before building the =docker run= command. Use it t
 
 Available variables:
 
-| Variable      | Type  | Description                              |
-|---------------+-------+------------------------------------------|
-| =CBOX_MOUNTS= | array | Extra volume mounts (=docker -v= syntax) |
+- =CBOX_MOUNTS= (array) :: extra volume mounts (=docker -v= syntax)
 
-Example on sharing the host NuGet cache so =dotnet restore= inside the container resolves packages instantly without a network round-trip:
+Example on sharing the host NuGet cache:
 
 #+begin_src sh
 # .claude/codebox-conf.sh
@@ -102,15 +100,12 @@ Arguments are forwarded to =claude=:
 
 ** Commands
 
-| Command      | Description                                        |
-|--------------+----------------------------------------------------|
-| =run=        | Run claude in the container (default)              |
-| =exec=       | Run a command in the container (default: bash)     |
-| =build=      | Build the container image(s) for the current user  |
-| =init=       | Create .claude/Dockerfile template in current repo |
-| =kill=       | Interactively kill running codebox containers      |
-| =kill --all= | Kill all running containers without prompting      |
-| =help=       | Show usage                                         |
+- =run= :: run claude in the container (default)
+- =exec= :: run a command in the container (default: bash)
+- =build= :: build the container image(s) for the current user
+- =init= :: create =.claude/Dockerfile= template in current repo
+- =kill= :: interactively kill running codebox containers (=--all= to skip prompt)
+- =help= :: show usage
 
 ** How it works
 
@@ -131,13 +126,11 @@ Additional mounts can be configured via =CBOX_MOUNTS= in =.claude/codebox-conf.s
 
 *** Conditional mounts
 
-These are added only when the corresponding host resources exist:
+Added only when the corresponding host resource exists:
 
-| Resource                             | Condition                          | Purpose                             |
-|--------------------------------------+------------------------------------+-------------------------------------|
-| Emacs server socket                  | =/run/user/$UID/emacs/server=      | =emacsclient= from inside container |
-| SSH agent socket                     | =$SSH_AUTH_SOCK= is set            | Git SSH operations                  |
-| =~/.ssh/known_hosts=                 | File exists                        | SSH host verification               |
+- Emacs server socket (=/run/user/$UID/emacs/server=): =emacsclient= from inside container
+- SSH agent socket (=$SSH_AUTH_SOCK=): git SSH operations
+- =~/.ssh/known_hosts=: SSH host verification
 *** Limitations
 
 Git commit signing (GPG/SSH) does not work inside the container. The recommended workaround for now is to run a separate Claude instance on the host for reviewing and committing changes.
@@ -163,15 +156,6 @@ Set =CBOX_CLIPBOARD=1= to enable clipboard access (mounts X11/Wayland socket).
 
 Codebox is a guardrail, not a security boundary.
 
-*** What it protects
+Protects against accidental system damage (=rm -rf /=), accessing other repositories, reading private keys (=~/.ssh/id_*=) or sensitive data (=~/.gnupg/=, password stores), and modifying =/etc/= or system packages.
 
-- Accidental system damage; e.g. =rm -rf /=
-- Accessing other repositories
-- Reading =~/.ssh/id_*= private keys or other sensitive user information
-- Accessing =~/.gnupg/=, password stores, etc.
-- Modifying =/etc/= or system packages
-
-*** What it does NOT protect
-
-- Code execution by a determined attacker
-- With =CBOX_CLIPBOARD=1=: X11 keylogging, screenshots, input injection
+Does *not* protect against code execution by a determined attacker. With =CBOX_CLIPBOARD=1=, X11 keylogging, screenshots, and input injection are possible.
