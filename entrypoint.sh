@@ -15,6 +15,12 @@ if [[ -n "$EDITOR" ]]; then
     fi
 fi
 
+# Source repo-specific init hook if present (e.g. background package restore)
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || true
+if [[ -n "$repo_root" && -f "$repo_root/.claude/codebox-init.sh" ]]; then
+    source "$repo_root/.claude/codebox-init.sh"
+fi
+
 claude_bin="$HOST_HOME/.local/bin/claude"
 if ! [ -x "$claude_bin" ]; then
     echo "Error: claude not found at $claude_bin" >&2
