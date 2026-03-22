@@ -6,14 +6,15 @@ ARG HOST_USER=user
 ARG HOST_HOME=/home/user
 
 RUN apt-get update && apt-get install -y \
-    git \
-    ripgrep \
     ca-certificates \
-    emacs-nox \
     curl \
+    emacs-nox \
+    git \
+    jq \
     make \
-    xclip \
+    ripgrep \
     wl-clipboard \
+    xclip \
     && rm -rf /var/lib/apt/lists/*
 
 # Remove any conflicting user/group, then create host user
