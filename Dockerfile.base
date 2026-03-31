@@ -31,6 +31,10 @@ RUN existing_user=$(getent passwd "$HOST_UID" | cut -d: -f1); \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Shims: provide actionable errors when optional features aren't available
+COPY shims/ /usr/local/bin/
+RUN chmod +x /usr/local/bin/xclip /usr/local/bin/wl-copy /usr/local/bin/wl-paste
+
 ENV EXPECTED_UID=$HOST_UID
 ENV EXPECTED_GID=$HOST_GID
 ENV CBOX_USER=$HOST_USER

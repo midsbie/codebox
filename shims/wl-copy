@@ -1,0 +1,6 @@
+#!/bin/bash
+if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+    echo "error: clipboard unavailable in container — rerun with CBOX_CLIPBOARD=1" >&2
+    exit 1
+fi
+exec /usr/bin/wl-copy "$@"
