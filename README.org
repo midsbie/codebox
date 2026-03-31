@@ -105,6 +105,7 @@ Arguments are forwarded to =claude=:
 - =build= :: build the container image(s) for the current user
 - =init= :: create =.claude/Dockerfile= template in current repo
 - =kill= :: interactively kill running codebox containers (=--all= to skip prompt)
+- =status= :: show resolved configuration for the current repo
 - =help= :: show usage
 
 ** How it works
