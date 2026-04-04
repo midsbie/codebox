@@ -35,6 +35,13 @@ RUN chmod +x /entrypoint.sh
 COPY shims/ /usr/local/bin/
 RUN chmod +x /usr/local/bin/xclip /usr/local/bin/wl-copy /usr/local/bin/wl-paste
 
+# Environment marker: lets any program detect it is running inside Codebox.
+# Two complementary signals following container ecosystem conventions:
+#   /.codebox :: marker file similar to Docker's /.dockerenv; survives env scrubbing
+#   CODEBOX=1 :: env var similar to Codespaces' CODESPACES=true; easiest programmatic check
+RUN touch /.codebox
+ENV CODEBOX=1
+
 ENV EXPECTED_UID=$HOST_UID
 ENV EXPECTED_GID=$HOST_GID
 ENV CBOX_USER=$HOST_USER
