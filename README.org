@@ -160,3 +160,7 @@ Codebox is a guardrail, not a security boundary.
 Protects against accidental system damage (=rm -rf /=), accessing other repositories, reading private keys (=~/.ssh/id_*=) or sensitive data (=~/.gnupg/=, password stores), and modifying =/etc/= or system packages.
 
 Does *not* protect against code execution by a determined attacker. With =CBOX_CLIPBOARD=1=, X11 keylogging, screenshots, and input injection are possible.
+
+* License
+
+Released under the MIT License. See =LICENSE= for details.
