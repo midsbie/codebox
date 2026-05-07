@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     jq \
     make \
     ripgrep \
+    uuidgen \
     wl-clipboard \
     xclip \
     && rm -rf /var/lib/apt/lists/*
