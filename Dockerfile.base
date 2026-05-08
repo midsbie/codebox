@@ -5,6 +5,8 @@ ARG HOST_GID=1000
 ARG HOST_USER=user
 ARG HOST_HOME=/home/user
 
+# NOTES:
+# - uuid-runtime required for the `uuidgen` utility
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
@@ -13,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     jq \
     make \
     ripgrep \
-    uuidgen \
+    uuid-runtime \
     wl-clipboard \
     xclip \
     && rm -rf /var/lib/apt/lists/*
