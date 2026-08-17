@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     emacs-nox \
     git \
+    git-lfs \
     jq \
     make \
     ripgrep \
